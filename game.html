@@ -1,0 +1,465 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Chatroom with Gemini API</title>
+    <style>
+        body {
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #000;
+            /* Default background in case image doesn't load */
+        }
+
+        #backgroundWrapper {
+            width: 100vw;
+            /* Use viewport width units */
+            max-width: 800px;
+            /* Maximum width remains 800px */
+            height: 100vw;
+            /* Height is set to be the same in viewport width units, approximating the width */
+            max-height: 800px;
+            /* Maximum height to match the maximum width */
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            background-image: url('./img/giphy.gif');
+            /* Replace with your image path */
+            background-size: cover;
+            /* Ensures the image is fully visible without stretching */
+            background-repeat: no-repeat;
+            background-position: center top;
+        }
+
+        #gameContainer {
+            width: 100%;
+            /* Takes the full width of the background wrapper */
+            height: 200px;
+            /* Adjusted height to position at the bottom of the image */
+            background: rgba(0, 0, 0, 0.8);
+            /* Semi-transparent black background */
+            padding: 10px;
+            display: none;
+            box-sizing: border-box;
+            border: 1px solid #fff;
+            overflow: hidden;
+        }
+
+        #messages {
+            height: 80%;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+
+        .message {
+            margin: 5px 0;
+        }
+
+        .userMessage {
+            color: #0f0;
+        }
+
+        .botMessage {
+            color: #ff0;
+        }
+
+        #messageInput {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            background: transparent;
+            border: none;
+            border-top: 1px solid #fff;
+            color: white;
+            font-size: 16px;
+        }
+
+        #startButton, #introButton {
+            padding: 15px 30px;
+            /* Increase padding for a better look */
+            font-size: 20px;
+            /* Adjust font size */
+            cursor: pointer;
+            /* Position it within the wrapper */
+            margin-bottom: 20px;
+            color: white;
+            /* Text color */
+            background: rgba(0, 0, 0, 0.8);
+            /* Same semi-transparent background as introBlock */
+            border: 1px solid #fff;
+            /* Same border as introBlock */
+            border-radius: 5px;
+            /* Rounded corners similar to introBlock */
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+            /* Subtle shadow for depth */
+            transition: all 0.3s ease;
+            /* Smooth transition for hover effects */
+        }
+
+        #startButton:hover,
+        #introButton:hover {
+            background: rgba(0, 0, 0, 1);
+            /* Darker background on hover */
+            box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.5);
+            /* Slightly larger shadow on hover */
+            transform: scale(1.05);
+            /* Slightly enlarge on hover */
+        }
+
+        #introBlock {
+            width: 80%;
+            max-width: 600px;
+            background: rgba(0, 0, 0, 0.8);
+            /* Semi-transparent background */
+            padding: 20px;
+            box-sizing: border-box;
+            border: 1px solid #fff;
+            margin-bottom: 20px;
+            /* Space between intro block and start button */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+            /* Initially hidden */
+        }
+    </style>
+</head>
+
+<body>
+    <div id="introBlock">
+        <h2>歡迎來到《餘燼》</h2>
+        <p>餘燼是一款以後末日世界為背景的角色扮演冒險遊戲。故事發生在2075年，一場全球性的生態災難摧毀了人類文明，剩下的幸存者分為三個主要群體：綠色革命者、新技術派和回歸者。
+            玩家將扮演主角，一位在災難中失去家人的生存者，在廢墟中醒來，記憶模糊不清，開始尋找真相和自我救贖之旅。ps.Ai會自己改劇情喔 haha</p>
+        <button id="startButton">Start Game</button>
+    </div>
+    <div id="backgroundWrapper">
+        <button id="introButton">遊戲介紹</button>
+        <div id="gameContainer">
+            <div id="messages"></div>
+            <form id="messageForm">
+                <input type="text" id="messageInput" placeholder="Type your command...">
+            </form>
+        </div>
+    </div>
+
+</body>
+<script>
+    var conversationHistory = [];
+
+    var apiKey = prompt("Please enter your API key:", "");
+    var userName = prompt("Please enter your name:", "");
+
+    if (!apiKey || !userName) {
+        alert("API key and name are required to use the chatroom.");
+        // Optionally, redirect or disable form
+    } else {
+        document.getElementById('messageForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+            var inputElement = document.getElementById('messageInput');
+            var message = inputElement.value;
+
+            addToConversationHistory('user', message);
+            displayMessage(message, 'user');
+            inputElement.disabled = true;
+            fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + apiKey, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    "contents": conversationHistory,
+                    "safetySettings": [
+                        {
+                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                            "threshold": "BLOCK_NONE"
+                        },
+                        {
+                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "threshold": "BLOCK_NONE"
+                        },
+                    ],
+                    "generationConfig": {
+                        "stopSequences": [
+                            ""
+                        ],
+                        "temperature": 2.0,
+                        "maxOutputTokens": 2048,
+                        "topP": 0.8,
+                        "topK": 10
+                    }
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    var responseText = data.candidates[0].content.parts[0].text;
+                    addToConversationHistory('model', responseText);
+                    displayMessage(responseText, 'bot');
+                    inputElement.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error)
+                    inputElement.disabled = false;
+                });
+
+            document.getElementById('messageInput').value = '';
+        });
+    }
+
+    function addToConversationHistory(role, text) {
+        conversationHistory.push({
+            "role": role,
+            "parts": [{
+                "text": text
+            }]
+        });
+    }
+
+    function displayMessage(message, sender) {
+        var messageElement = document.createElement('div');
+        var formatMessage = formatText(message);
+        messageElement.classList.add('message');
+        if (sender === 'user') {
+            messageElement.classList.add('userMessage');
+        } else {
+            messageElement.classList.add('botMessage');
+        }
+        document.getElementById('messages').appendChild(messageElement);
+        updateSceneImage(message);
+        // Function to display the text one character at a time
+        function typeText(element, text, index) {
+            if (index < text.length) {
+                let char = text[index];
+                if (char === '<') {
+                    let endIndex = text.indexOf('>', index);
+                    if (endIndex !== -1) {
+                        element.innerHTML += text.substring(index, endIndex + 1);
+                        index = endIndex + 1;
+                    }
+                } else {
+                    element.innerHTML += char;
+                    index++;
+                }
+                setTimeout(function () {
+                    typeText(element, text, index);
+                }, 75); // Adjust typing speed by changing the delay (in milliseconds)
+            } else {
+                // Scroll to bottom after the entire message is displayed
+                document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+            }
+        }
+
+        // Start typing the formatted message
+        typeText(messageElement, formatMessage, 0);
+    }
+
+    function updateSceneImage(responseText) {
+        let sceneMatch = responseText.match(/場景：(.*?)\s/); // 使用正則表達式匹配場景描述
+        if (sceneMatch && sceneMatch[1]) {
+            let scene = sceneMatch[1];
+            console.log(scene);
+            if (scene.includes("廢墟")) {
+                document.getElementById('backgroundWrapper').style.backgroundImage = "url('廢墟.jpg')";
+            } else if (scene.includes("新生森林")) {
+                document.getElementById('backgroundWrapper').style.backgroundImage = "url('新生森林.jpg')";
+            } else if (scene.includes("新技術派實驗室")) {
+                document.getElementById('backgroundWrapper').style.backgroundImage = "url('高科技實驗室.jpeg')";
+            } else if (scene.includes("簡樸村落")) {
+                document.getElementById('backgroundWrapper').style.backgroundImage = "url('簡樸村落.jpeg')";
+            }
+        }
+    }
+    function formatText(text) {
+        // Replace ** with a new line and bold tag
+        let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<br><strong>$1</strong>');
+
+        // Replace * with a new line and bullet point
+        formattedText = formattedText.replace(/\*(.*?)\s/g, '<br>$1');
+
+        return formattedText;
+    }
+
+    document.getElementById('introButton').addEventListener('click', function () {
+        document.getElementById('introBlock').style.display = 'block';
+        this.style.display = 'none'; // Hide the intro button
+        document.getElementById('startButton').style.display = 'block'; // Show the start button
+    });
+
+    document.getElementById('startButton').addEventListener('click', function () {
+        // Change background image and display settings when starting the game
+        document.getElementById('backgroundWrapper').style.backgroundImage = "url('廢墟.jpeg')";
+        document.getElementById('introBlock').style.display = 'none'; // Show the game container
+        document.getElementById('gameContainer').style.display = 'inline';
+        document.getElementById('introButton').style.display = 'none'; // Hide the start button
+
+        conversationHistory.push({
+            "role": 'user',
+            "parts": [{
+                "text": `腳本：
+                    """
+                    ### 遊戲標題：餘燼
+
+                    ### 遊戲背景：
+                    在一場全球性的生態災難後的2075年，人類文明幾乎崩潰。幸存者分為三個主要群體：綠色革命者、新技術派和回歸者。${userName}是一個在災難中失去家人的生存者，在廢墟中醒來，對過去的記憶模糊不清。
+
+                    ### 主要角色：
+                    - **${userName}**：主角，在災難中失去家人的生存者。
+                    - **薩拉**：綠色革命者領袖，致力於恢復自然平衡。
+                    - **戴維**：新技術派代表，相信科技能拯救人類。
+                    - **瑪雅**：回歸者社區的長者，主張原始生活方式。
+
+                    ### 遊戲腳本流程：
+
+                    #### 開場：（場景：廢墟）
+
+                    ${userName}在廢墟中醒來，記憶模糊。
+
+                    **${userName}**：（喃喃自語）這裡是…哪裡？我的家人…發生了什麼事？
+
+                    **選擇A**：尋找人類聚居地的跡象。
+                    **選擇B**：獨自探索廢墟尋找線索。
+
+                    #### 遇見綠色革命者：（場景：新生森林）
+
+                    **若選擇A**，${userName}遇到綠色革命者團隊。
+
+                    **綠色革命者成員**：你是誰？怎麼會在這裡？
+
+                    **${userName}**：我只是個迷路的生存者，尋找其他幸存者。
+
+                    **薩拉**：我是薩拉，綠色革命者的領袖。我們致力於恢復自然平衡。你願意加入我們嗎？
+
+                    **選擇A1**：加入他們，參與種植森林任務。
+                    **選擇A2**：質疑他們的方法，被迫逃離。
+
+                    **若選擇B**，${userName}在廢墟中發現綠色革命者的傳單。
+
+                    **${userName}**：（自言自語）這些人看起來是組織起來的…也許我應該去找他們。
+
+                    **選擇B1**：循線索找到他們的基地。
+                    **選擇B2**：忽視傳單，繼續探索。
+
+                    #### 新技術派劇情：（場景：高科技實驗室）
+
+                    **若選擇B2**，${userName}來到新技術派的基地。
+
+                    **戴維**：歡迎，我是戴維，新技術派的代表。我們相信科技能拯救人類。
+
+                    **${userName}**：你們的科技看起來很先進，能告訴我更多嗎？
+
+                    **選擇A**：協助他們的太陽能研究。
+                    **選擇B**：質疑他們的動機，探查內部。
+
+                    #### 回歸者劇情：（場景：簡樸村落）
+
+                    **若選擇A2**，${userName}進入回歸者社區。
+
+                    **瑪雅**：你好，陌生人。我是瑪雅，回歸者社區的長者。你看起來需要幫助。
+
+                    **${userName}**：你們在這裡過著怎樣的生活？
+
+                    **瑪雅**：我們過著簡樸的生活，回歸自然，不依賴科技。
+
+                    **選擇A**：接受並學習傳統生活方式。
+                    **選擇B**：建議適度使用技術，引發辯論。
+
+                    #### 發現家人線索：（場景：通訊中心廢墟）
+
+                    **${userName}**找到可能指向家人下落的信息。
+
+                    **${userName}**：（激動地）這是我家人的消息！我得找到他們。
+
+                    **選擇A**：全力尋找家人。
+                    **選擇B**：選擇繼續當前的使命。
+
+                    #### 面對過去的真相：（場景：舊公司資料庫）
+
+                    **${userName}**發現自己曾是災難的間接推手。
+
+                    **${userName}**：（震驚地）這怎麼可能…我居然是這場災難的推手？
+
+                    **選擇A**：接受事實，尋求贖罪。
+                    **選擇B**：否認責任，但內心掙扎加劇。
+
+                    #### 三方衝突的高潮：（場景：中立區會議廳）
+
+                    三派在爭奪關鍵資源時發生衝突。
+
+                    **薩拉**：我們必須保護自然，這是唯一的生存之道！
+
+                    **戴維**：科技是未來，不能停滯不前！
+
+                    **瑪雅**：我們必須回歸簡樸的生活，遠離這些爭鬥！
+
+                    **${userName}**：（思考後）...
+
+                    **選擇A**：努力斡旋，促成合作。
+                    **選擇B**：選擇支持一方，加深分歧。
+                    **選擇C**：宣布獨立，開闢新路。
+
+                    ### 結局：
+
+                    **綠色烏托邦**：地球逐漸恢復，但技術進步緩慢。
+                    **技術霸權**：快速重建文明，但犧牲自然平衡。
+                    **新石器時代**：和諧但艱苦的生活。
+                    **個人救贖**：引領人類走向更平衡的未來。
+                """
+                可以根據腳本中的對話，也可以自由發揮，開始一個文字冒險遊戲，每一次的對話，都需要呈現以下格式與資訊：
+                <場景：目前故事的背景為何>
+                <選擇>：在每一次的對話中，你都會根據腳本給我可以選擇的動作，根據我選擇的動作繼續接下來的劇情，整體劇情會圍繞腳本發展。
+
+                根據我的選擇進行故事就好，不要幫我做出選擇，也不用告訴我選擇後的劇情`
+            }]
+        })
+        fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + apiKey, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                "contents": conversationHistory,
+                "safetySettings": [
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "threshold": "BLOCK_NONE"
+                    },
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "threshold": "BLOCK_NONE"
+                    },
+                ],
+                "generationConfig": {
+                    "stopSequences": [
+                        ""
+                    ],
+                    "temperature": 2.0,
+                    "maxOutputTokens": 2048,
+                    "topP": 0.8,
+                    "topK": 10
+                }
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log(conversationHistory);
+                var responseText = data.candidates[0].content.parts[0].text;
+                addToConversationHistory('model', responseText);
+                displayMessage(responseText, 'bot');
+            })
+            .catch(error => console.error('Error:', error));
+    });
+
+
+
+</script>
+
+</html>
